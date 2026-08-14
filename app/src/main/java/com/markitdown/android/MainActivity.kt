@@ -77,7 +77,7 @@ class MainActivity : AppCompatActivity() {
                         ""
                     }
                     throw IllegalStateException(
-                        "Failed to open $uri: ${e.message ?: e}$hint", e
+                        "Failed to open $uri: ${e.message ?: e}. $hint", e
                     )
                 }
                 if (bytes.size > MAX_FILE_SIZE_BYTES) {
