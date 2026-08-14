@@ -1,0 +1,51 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build APKs
+        run: ./gradlew :app:assembleDevDebug :app:assembleProdDebug
+
+      - name: Rename APKs
+        run: |
+          mkdir -p release
+          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk release/markitdown-android-dev-debug.apk
+          cp app/build/outputs/apk/prod/debug/app-prod-debug.apk release/markitdown-android-prod-debug.apk
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/markitdown-android-dev-debug.apk
+            release/markitdown-android-prod-debug.apk
+          generate_release_notes: true
