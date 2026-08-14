@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MarkItDown</string>
+
+    <string name="supported_formats">Offline conversion: PDF, DOCX, XLSX, PPTX, EPUB, ZIP, HTML, TXT/MD, CSV, JSON, XML, RSS/Atom, Outlook .msg, IPYNB</string>
+
+    <string name="pick_file">Pick a file</string>
+    <string name="share">Share</string>
+    <string name="share_title">Share Markdown</string>
+    <string name="status_idle">Ready. All conversion happens on this device.</string>
+    <string name="status_converting">Converting…</string>
+    <string name="status_converted">Converted %1$s</string>
+    <string name="status_unsupported">Unsupported format: %1$s</string>
+    <string name="status_too_large">File is too large (max %1$d MB)</string>
+    <string name="status_error">Error: %1$s</string>
+    <string name="error_open_hint"> If you picked this from Recents, browse to it instead — Recents entries can point to files that no longer exist.</string>
+    <string name="output_hint">Markdown output will appear here.</string>
+</resources>

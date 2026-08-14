@@ -1,0 +1,246 @@
+package com.markitdown.android
+
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import android.provider.DocumentsContract
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import android.view.View
+import java.io.FileNotFoundException
+import java.io.InputStream
+import java.util.Locale
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.chaquo.python.Python
+import com.markitdown.android.databinding.ActivityMainBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Picks a document (Storage Access Framework) and converts it to Markdown
+ * entirely on-device via the bundled MarkItDown + Chaquopy.
+ */
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityMainBinding
+
+    private var lastMarkdown: String? = null
+
+    private val pickFile =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) handleFile(uri)
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        binding.pickButton.setOnClickListener {
+            pickFile.launch(SUPPORTED_MIME_TYPES)
+        }
+        binding.shareButton.setOnClickListener { shareOutput() }
+        updateShareButton()
+    }
+
+    private fun handleFile(uri: Uri) {
+        val name = queryDisplayName(uri) ?: "document"
+        val ext = name.substringAfterLast('.', "").lowercase()
+
+        // Belt and braces: some file providers ignore the MIME-type filter.
+        if (ext !in SUPPORTED_EXTENSIONS) {
+            binding.status.text =
+                getString(R.string.status_unsupported, ext.ifEmpty { "<none>" })
+            return
+        }
+
+        binding.progress.visibility = View.VISIBLE
+        binding.status.text = getString(R.string.status_converting)
+        binding.pickButton.isEnabled = false
+        binding.shareButton.isEnabled = false
+        binding.output.text = ""
+
+        // Python runs fine off the main thread; do the conversion on IO.
+        lifecycleScope.launch(Dispatchers.IO) {
+            val result = runCatching {
+                val bytes = try {
+                    openSelectedFile(uri).use { it.readBytes() }
+                } catch (e: Exception) {
+                    val hint = if (e.message?.contains("ENOENT") == true
+                        || e.message?.contains("No such file") == true
+                    ) {
+                        getString(R.string.error_open_hint)
+                    } else {
+                        ""
+                    }
+                    throw IllegalStateException(
+                        "Failed to open $uri: ${e.message ?: e}$hint", e
+                    )
+                }
+                if (bytes.size > MAX_FILE_SIZE_BYTES) {
+                    error(
+                        getString(
+                            R.string.status_too_large,
+                            (MAX_FILE_SIZE_BYTES / 1024 / 1024)
+                        )
+                    )
+                }
+                Python.getInstance()
+                    .getModule("markitdown_android")
+                    .callAttr("convert_bytes", bytes, name)
+                    .toString()
+            }
+
+            withContext(Dispatchers.Main) {
+                binding.progress.visibility = View.GONE
+                binding.pickButton.isEnabled = true
+                result
+                    .onSuccess { markdown ->
+                        lastMarkdown = markdown
+                        binding.status.text = getString(R.string.status_converted, name)
+                        binding.output.text = markdown
+                        updateShareButton()
+                    }
+                    .onFailure { e ->
+                        lastMarkdown = null
+                        // Our own IllegalStateException wrappers carry short,
+                        // user-friendly messages (open failures, size limits).
+                        // PyException and friends carry a full traceback, so
+                        // collapse to the root cause for the status bar.
+                        val shortMessage = if (e is IllegalStateException) {
+                            e.message ?: e.toString()
+                        } else {
+                            val rootCause = generateSequence(e) { it.cause }.last()
+                            rootCause.message ?: rootCause.toString()
+                        }
+                        binding.status.text = getString(R.string.status_error, shortMessage)
+                        val detail = buildString {
+                            appendLine(e.toString())
+                            var cause = e.cause
+                            while (cause != null) {
+                                appendLine("Caused by: $cause")
+                                cause = cause.cause
+                            }
+                        }
+                        binding.output.text = detail
+                        updateShareButton()
+                    }
+            }
+        }
+    }
+
+    private fun openSelectedFile(uri: Uri): InputStream {
+        return try {
+            contentResolver.openInputStream(uri)
+                ?: throw FileNotFoundException("Could not open file (null stream) – $uri")
+        } catch (e: FileNotFoundException) {
+            openMediaDocumentFallback(uri) ?: throw e
+        }
+    }
+
+    /**
+     * Some Android versions return broken media DocumentsProvider URIs from the
+     * system picker's Recents tab, for example:
+     *   content://com.android.providers.media.documents/document/document:1001468564
+     * Those can fail with ENOENT even when the file exists. The numeric suffix
+     * is the real MediaStore row ID, so retry via MediaStore.
+     */
+    private fun openMediaDocumentFallback(uri: Uri): InputStream? {
+        if (uri.authority != "com.android.providers.media.documents") return null
+
+        val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+            ?: uri.lastPathSegment
+            ?: return null
+        val mediaId = docId.substringAfterLast(':').toLongOrNull() ?: return null
+
+        val candidates = buildList {
+            val lowerName = (queryDisplayName(uri) ?: "").lowercase(Locale.US)
+            when {
+                lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
+                    || lowerName.endsWith(".png") || lowerName.endsWith(".webp") -> {
+                    add(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                }
+                lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v") -> {
+                    add(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                }
+                lowerName.endsWith(".mp3") || lowerName.endsWith(".wav")
+                    || lowerName.endsWith(".m4a") -> {
+                    add(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+                }
+            }
+            add(MediaStore.Files.getContentUri("external"))
+            add(MediaStore.Downloads.EXTERNAL_CONTENT_URI)
+        }
+
+        for (baseUri in candidates.distinct()) {
+            val mediaUri = Uri.withAppendedPath(baseUri, mediaId.toString())
+            try {
+                return contentResolver.openInputStream(mediaUri)
+            } catch (_: FileNotFoundException) {
+                // Try the next MediaStore collection.
+            } catch (_: SecurityException) {
+                // The picked URI may not grant access to this fallback collection.
+            }
+        }
+        return null
+    }
+
+    private fun shareOutput() {
+        val markdown = lastMarkdown ?: return
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, markdown)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_title)))
+    }
+
+    private fun updateShareButton() {
+        binding.shareButton.isEnabled = !lastMarkdown.isNullOrBlank()
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }
+
+    companion object {
+        private const val MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
+
+        /**
+         * Formats MarkItDown can convert fully offline. This list drives both
+         * the file-picker filter and the post-pick validation.
+         */
+        val SUPPORTED_EXTENSIONS = setOf(
+            "pdf",
+            "docx", "xlsx", "pptx",
+            "epub", "zip",
+            "html", "htm",
+            "txt", "text", "md", "markdown",
+            "csv",
+            "json", "jsonl",
+            "xml", "rss", "atom",
+            "msg", "ipynb",
+        )
+
+        val SUPPORTED_MIME_TYPES = arrayOf(
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/epub+zip",
+            "application/zip",
+            "text/html", "application/xhtml+xml",
+            "text/plain",
+            "text/csv", "application/csv",
+            "application/json",
+            "text/xml", "application/xml",
+            "application/vnd.ms-outlook",
+            "application/x-ipynb+json",
+        )
+    }
+}
