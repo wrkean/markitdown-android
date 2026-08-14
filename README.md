@@ -1,62 +1,86 @@
 # MarkItDown for Android
 
-An Android app that converts documents to Markdown **entirely on-device**, using
-[MarkItDown](https://github.com/microsoft/markitdown) embedded via
-[Chaquopy](https://chaquo.com/chaquopy/). No network, no server, no API keys.
+Convert documents to Markdown on your Android device — **offline, private, no server needed**.
 
-The app **only enables the converters that work in offline mode**. Everything
-that needs a network connection, a cloud API, or an external binary is disabled.
+Built on [MarkItDown](https://github.com/microsoft/markitdown) by Microsoft, packaged as a standalone Android app.
 
-## Supported formats
+## Download
 
-| Format         | Extensions                              | Notes |
-|----------------|-----------------------------------------|-------|
-| PDF            | `.pdf`                                  | Pure-Python `pdfminer.six` text extraction (no `pdfplumber`/`pypdfium2` on Android) |
-| Word           | `.docx`                                 | Via `mammoth` |
-| PowerPoint     | `.pptx`                                 | Via `python-pptx` |
-| Excel          | `.xlsx`                                 | Lightweight bundled `openpyxl` converter (no pandas/numpy) |
-| EPUB           | `.epub`                                 | |
-| ZIP            | `.zip`                                  | Recursively converts contents |
-| Outlook        | `.msg`                                  | Via `olefile` |
-| HTML / XHTML   | `.html`, `.htm`                         | |
-| RSS / Atom     | `.xml`, `.rss`, `.atom`                 | Local feed files only |
-| Text / Markdown| `.txt`, `.text`, `.md`, `.markdown`     | |
-| CSV            | `.csv`                                  | Charset auto-detected |
-| JSON           | `.json`, `.jsonl`                       | |
-| Jupyter        | `.ipynb`                                | |
+**[Latest Release](../../releases/latest)** — download the `prod` APK for your phone.
 
-### Deliberately disabled (don't work offline)
+| Build | For | Size |
+|-------|-----|------|
+| `markitdown-android-prod-debug.apk` | Real phones (arm64) | ~40 MB |
+| `markitdown-android-dev-debug.apk` | Emulators (arm64 + x86_64) | ~59 MB |
 
-`ImageConverter` (needs `exiftool` / LLM), `AudioConverter` (needs `ffmpeg` + speech recognition),
-URL-based converters (`YouTubeConverter`, `WikipediaConverter`, `BingSerpConverter`), and the
-pandas-based `XlsxConverter`/`XlsConverter` (replaced by lightweight `openpyxl` converter; legacy
-`.xls` dropped). Azure Document Intelligence / Content Understanding are cloud-only.
+> On Android, you'll need to allow "Install unknown apps" for your browser or file manager.
 
-If you pick one of these file types, the app shows a clear "unsupported" error.
+## What it does
 
-## Prerequisites
+Pick a document → get clean Markdown. Everything runs on your device — no files leave your phone.
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| **JDK** | 17 or 21 | Gradle daemon + AGP compilation. Java 25 is too new for Gradle 8.9. |
-| **Python** | 3.12 | Chaquopy's `buildPython` must match `chaquopy.version`. |
-| **Android SDK** | Platform 35, Build-Tools 35.0.0 | Standard Android build. |
+**Supported formats:**
 
-### Installing on Linux (user-local, no sudo)
+| Format | Extensions |
+|--------|------------|
+| PDF | `.pdf` |
+| Word | `.docx` |
+| PowerPoint | `.pptx` |
+| Excel | `.xlsx` |
+| EPUB | `.epub` |
+| ZIP | `.zip` (converts contents recursively) |
+| Outlook | `.msg` |
+| HTML | `.html`, `.htm` |
+| RSS / Atom | `.xml`, `.rss`, `.atom` |
+| Text | `.txt`, `.md`, `.markdown` |
+| CSV | `.csv` |
+| JSON | `.json`, `.jsonl` |
+| Jupyter | `.ipynb` |
+
+**Not supported** (require network or external tools): images, audio, video, YouTube URLs, legacy `.xls`.
+
+## How to use
+
+1. Open the app
+2. Tap **Pick a file**
+3. Browse to your document (tip: pick from "Downloads", not "Recents")
+4. The Markdown appears — tap **Share** to send it somewhere
+
+## Why Markdown?
+
+Markdown is plain text with minimal formatting — perfect for feeding into LLMs, note-taking apps, or text editors. It preserves structure (headings, lists, tables) without the bloat of Word or PDF.
+
+## Privacy
+
+- **No network permission** — the app literally cannot send data anywhere
+- **No tracking, no analytics**
+- **No cloud services** — everything runs on-device
+
+---
+
+## For developers
+
+### Building from source
+
+**Prerequisites:**
+- JDK 17 or 21 (Java 25 is too new for Gradle 8.9)
+- Python 3.12 (must match `chaquopy.version`)
+- Android SDK (Platform 35, Build-Tools 35.0.0)
+
+**Quick start (Linux):**
 
 ```sh
-# JDK 21 (Temurin)
+# Install JDK 21
 curl -fL -o /tmp/jdk21.tar.gz https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse
 mkdir -p ~/tools/jdk21 && tar -xzf /tmp/jdk21.tar.gz -C ~/tools/jdk21 --strip-components=1
 export JAVA_HOME=~/tools/jdk21
-export PATH=$JAVA_HOME/bin:$PATH
 
-# Python 3.12 (via uv)
+# Install Python 3.12
 curl -LsSf https://astral.sh/uv/install.sh | sh
 $HOME/.local/bin/uv python install 3.12
 export PATH=$HOME/.local/bin:$PATH
 
-# Android SDK (cmdline-tools)
+# Install Android SDK
 curl -fL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
 mkdir -p ~/android-sdk/cmdline-tools && unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
 mv /tmp/cmdtools/cmdline-tools ~/android-sdk/cmdline-tools/latest
@@ -64,133 +88,81 @@ yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
 ~/android-sdk/cmdline-tools/latest/bin/sdkmanager \
     "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 export ANDROID_HOME=~/android-sdk
+
+# Write local.properties
+echo "sdk.dir=$HOME/android-sdk" > local.properties
+
+# Build
+./gradlew :app:assembleProdDebug
 ```
 
-Then write `local.properties` in the project root:
-```
-sdk.dir=/home/<you>/android-sdk
-```
+**Or open in Android Studio** — it handles JDK, SDK, and Python setup automatically.
 
-## Building
-
-```sh
-export JAVA_HOME=~/tools/jdk21
-export PATH=$JAVA_HOME/bin:$HOME/.local/bin:$PATH
-export ANDROID_HOME=~/android-sdk
-
-./gradlew :app:assembleDevDebug    # arm64 + x86_64 (emulators)
-./gradlew :app:assembleProdDebug   # arm64-only (real devices, ~40 MB)
-```
-
-First build downloads Chaquopy wheels and takes several minutes; subsequent builds
-are fast.
-
-## Installing
-
-```sh
-# Over Wi-Fi (requires one-time USB `adb tcpip 5555`, or wireless debugging)
-$HOME/android-sdk/platform-tools/adb install -r \
-    app/build/outputs/apk/prod/debug/app-prod-debug.apk
-
-# Over local HTTP (no adb needed)
-cd app/build/outputs/apk/prod/debug
-python3 -m http.server 8080
-# Then open http://<your-pc-ip>:8080/app-prod-debug.apk on your phone
-```
-
-## Project structure
+### Project structure
 
 ```
 ├── app/
 │   ├── build.gradle.kts
 │   └── src/main/
-│       ├── AndroidManifest.xml
 │       ├── java/com/markitdown/android/
-│       │   ├── MarkItDownApp.kt      # Starts embedded Python interpreter
-│       │   └── MainActivity.kt       # SAF file picker + conversion
+│       │   ├── MarkItDownApp.kt      # Starts embedded Python
+│       │   └── MainActivity.kt       # File picker + conversion
 │       ├── python/
-│       │   ├── markitdown/           # Bundled MarkItDown source (patched, MIT)
-│       │   ├── markitdown_android.py # Bridge: bytes + filename → Markdown
-│       │   └── offline_converters.py # Lightweight openpyxl-based .xlsx converter
-│       └── res/                      # Layouts, themes, launcher icon
+│       │   ├── markitdown/           # Patched MarkItDown source (MIT)
+│       │   ├── markitdown_android.py # Bridge module
+│       │   └── offline_converters.py # Lightweight .xlsx converter
+│       └── res/                      # UI resources
 ├── build.gradle.kts
 ├── settings.gradle.kts
-├── gradle.properties
-├── gradlew / gradlew.bat
-└── README.md
+└── gradle.properties
 ```
 
-## How it works
+### How it works
 
-### Why a bundled copy of the source?
+The app uses [Chaquopy](https://chaquo.com/chaquopy/) to embed Python 3.12 directly in the Android APK. MarkItDown (a Python library) runs inside this embedded interpreter, converting documents to Markdown without any server or network.
 
-`pip install markitdown` is **not** used because MarkItDown hard-depends on
-`magika` (file-type detection), which requires `onnxruntime` — a native library
-with **no Android wheel**. The MarkItDown source is copied into
-`app/src/main/python/markitdown/` with two minimal patches, and only the wheels
-that exist for Android are installed via the `chaquopy { pip { ... } }` block.
+**Key architectural decisions:**
 
-### Patches
+- **Bundled source** — `pip install markitdown` can't be used because it depends on `magika` (needs `onnxruntime`, no Android wheel). The source is copied into `app/src/main/python/markitdown/` with two patches.
+- **Patches:**
+  1. `_markitdown.py` — makes `magika` optional (falls back to extension-based detection)
+  2. `converters/_pdf_converter.py` — makes `pdfplumber` optional (falls back to `pdfminer.six`)
+- **Custom XLSX converter** — `offline_converters.py` replaces the pandas-based one with a lightweight `openpyxl` version (~30 MB smaller APK)
+- **Offline blocklist** — image, audio, YouTube, Wikipedia, and Bing converters are disabled
 
-1. **`_markitdown.py`** — makes `magika` optional. Without it, MarkItDown
-   detects file types from the file extension/mimetype instead of content sniffing.
-   This is why the app always passes the original filename through.
-2. **`converters/_pdf_converter.py`** — makes `pdfplumber` optional. It needs
-   `pypdfium2` (also no Android wheel), so PDFs fall back to pure-Python
-   `pdfminer.six` text extraction (no table detection).
+### Updating from upstream
 
-### Additional app-level changes
+The bundled MarkItDown source (v0.1.7) can be updated from [upstream](https://github.com/microsoft/markitdown):
 
-3. **`offline_converters.py`** — lightweight `openpyxl`-based `.xlsx` converter
-   that replaces MarkItDown's pandas-based one, avoiding ~30 MB of numpy/pandas.
-   Legacy `.xls` is dropped.
-4. **`markitdown_android.py`** — the bridge un-registers the offline-unsupported
-   converters (`ImageConverter`, `AudioConverter`, `YouTubeConverter`,
-   `WikipediaConverter`, `BingSerpConverter`) and registers the custom `.xlsx`
-   converter.
+```sh
+# Clone upstream into the gitignored reference directory
+git clone https://github.com/microsoft/markitdown.git markitdown
 
-### The data flow
+# Copy the new source
+cp -r markitdown/packages/markitdown/src/markitdown app/src/main/python/markitdown
 
-1. `MainActivity` opens the Android system file picker, filtered to supported MIME types.
-2. The file bytes + name are passed to `markitdown_android.convert_bytes`.
-3. Chaquopy converts the Java `byte[]`/`String` to Python `bytes`/`str`.
-4. MarkItDown runs locally and returns the Markdown text.
-5. The text is shown in a scrollable, selectable view and can be shared via the **Share** button.
+# Re-apply the two patches (search for 'magika' and 'pdfplumber')
+```
 
-No `INTERNET` permission is declared — the app cannot leak data off-device.
+### CI/CD
 
-## Updating from upstream MarkItDown
+GitHub Actions builds both flavors on every tag push. To create a release:
 
-The bundled source in `app/src/main/python/markitdown/` was copied from the
-[upstream MarkItDown repository](https://github.com/microsoft/markitdown) at
-version 0.1.7. To update:
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
 
-1. Clone or fetch the upstream MarkItDown source into `markitdown/` at the repo
-   root (it is gitignored).
-2. Copy the new version:
-   ```sh
-   cp -r markitdown/packages/markitdown/src/markitdown app/src/main/python/markitdown
-   ```
-3. Re-apply the two patches (see "Patches" above). The diffs are small and
-   self-contained — search for `magika` and `pdfplumber` in the two files.
-4. Re-run the build and verify all 12 offline formats still convert.
+Both APKs are automatically attached to the GitHub Release.
 
-## Troubleshooting
+### Troubleshooting
 
-- **`Current thread does not hold the state lock for root project`** (during
-  `compile*Kotlin`) — caused by `org.gradle.parallel=true` racing with the Kotlin
-  Gradle Plugin on Gradle 8.9. It is intentionally **not** set in this project's
-  `gradle.properties`; don't re-enable it.
-- **`No matching distribution found for ...`** — the package has no Android wheel.
-  Check the `pip` block in `app/build.gradle.kts`. Don't add native-only packages
-  (e.g. `onnxruntime`, `pypdfium2`, `ffmpeg-python`).
-- **`Could not find a version that satisfies the requirement`** — same cause; see
-  the [Chaquopy FAQ](https://chaquo.com/chaquopy/doc/current/faq.html#pip-errors).
-- **Python version mismatch** — Chaquopy requires `buildPython` to match
-  `chaquopy.defaultConfig.version` (3.12).
-- **File open fails from Recents** — some Android versions return broken
-  `content://` URIs from the system picker's Recents tab. Pick from
-  "Downloads"/browse instead, or update to a build with the MediaStore fallback.
+| Error | Fix |
+|-------|-----|
+| `Current thread does not hold the state lock` | `org.gradle.parallel=true` races with KGP on Gradle 8.9. It's disabled in `gradle.properties` — don't re-enable. |
+| `No matching distribution found` | The package has no Android wheel. Check `app/build.gradle.kts` pip block. |
+| Python version mismatch | `buildPython` must match `chaquopy.version` (3.12). |
+| File open fails from Recents | Pick from "Downloads"/browse instead. Recents entries can be stale. |
 
 ## License
 
