@@ -1,1 +1,25 @@
-markitdown
+# Android / Gradle build output
+.gradle/
+build/
+local.properties
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Python (bundled source & pip)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Upstream MarkItDown source (kept locally for patch reference only)
+# Clone it from https://github.com/microsoft/markitdown
+markitdown/
