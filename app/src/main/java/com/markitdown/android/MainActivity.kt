@@ -7,6 +7,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.view.View
+import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.util.Locale
@@ -68,7 +69,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching {
                 val bytes = try {
-                    openSelectedFile(uri).use { it.readBytes() }
+                    readFileWithProgress(uri)
                 } catch (e: Exception) {
                     val fromRecents = isRecentsOpenFailure(e)
                     val hint = if (fromRecents) getString(R.string.error_open_hint) else ""
@@ -141,6 +142,57 @@ class MainActivity : AppCompatActivity() {
         } catch (e: FileNotFoundException) {
             openMediaDocumentFallback(uri) ?: throw e
         }
+    }
+
+    /**
+     * Reads the whole file into memory, driving the determinate progress bar
+     * while it streams in. Falls back to an indeterminate bar when the file
+     * size can't be queried (e.g. a broken Recents URI).
+     */
+    private fun readFileWithProgress(uri: Uri): ByteArray {
+        val size = queryFileSize(uri)?.takeIf { it > 0 }
+        if (size != null) {
+            runOnUiThread {
+                binding.progress.isIndeterminate = false
+                binding.progress.progress = 0
+            }
+        }
+        val buffer = ByteArray(READ_CHUNK_SIZE)
+        val output = ByteArrayOutputStream()
+        var readTotal = 0L
+        var lastPosted = -1
+        openSelectedFile(uri).use { input ->
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                output.write(buffer, 0, n)
+                if (size != null) {
+                    readTotal += n
+                    val percent = ((readTotal * 100) / size).toInt()
+                    if (percent != lastPosted) {
+                        lastPosted = percent
+                        val p = percent
+                        runOnUiThread { binding.progress.progress = p }
+                    }
+                }
+            }
+        }
+        if (size != null) {
+            runOnUiThread { binding.progress.isIndeterminate = true }
+        }
+        return output.toByteArray()
+    }
+
+    private fun queryFileSize(uri: Uri): Long? {
+        return runCatching {
+            contentResolver.query(
+                uri, arrayOf(OpenableColumns.SIZE), null, null, null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index >= 0 && !cursor.isNull(index)) cursor.getLong(index) else null
+            }
+        }.getOrNull()
     }
 
     /**
@@ -247,6 +299,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
+        private const val READ_CHUNK_SIZE = 64 * 1024              // 64 KB
 
         /**
          * Formats MarkItDown can convert fully offline. This list drives both

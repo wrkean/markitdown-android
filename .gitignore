@@ -23,3 +23,6 @@ __pycache__/
 # Upstream MarkItDown source (kept locally for patch reference only)
 # Clone it from https://github.com/microsoft/markitdown
 /markitdown/
+
+# Personal
+build.sh
