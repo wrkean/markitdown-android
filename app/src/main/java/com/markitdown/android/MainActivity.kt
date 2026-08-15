@@ -11,6 +11,7 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
@@ -69,15 +70,10 @@ class MainActivity : AppCompatActivity() {
                 val bytes = try {
                     openSelectedFile(uri).use { it.readBytes() }
                 } catch (e: Exception) {
-                    val hint = if (e.message?.contains("ENOENT") == true
-                        || e.message?.contains("No such file") == true
-                    ) {
-                        getString(R.string.error_open_hint)
-                    } else {
-                        ""
-                    }
-                    throw IllegalStateException(
-                        "Failed to open $uri: ${e.message ?: e}. $hint", e
+                    val fromRecents = isRecentsOpenFailure(e)
+                    val hint = if (fromRecents) getString(R.string.error_open_hint) else ""
+                    throw FileOpenException(
+                        "Failed to open $uri: ${e.message ?: e}. $hint", e, fromRecents
                     )
                 }
                 if (bytes.size > MAX_FILE_SIZE_BYTES) {
@@ -106,26 +102,32 @@ class MainActivity : AppCompatActivity() {
                     }
                     .onFailure { e ->
                         lastMarkdown = null
-                        // Our own IllegalStateException wrappers carry short,
-                        // user-friendly messages (open failures, size limits).
-                        // PyException and friends carry a full traceback, so
-                        // collapse to the root cause for the status bar.
-                        val shortMessage = if (e is IllegalStateException) {
-                            e.message ?: e.toString()
+                        if (e is FileOpenException && e.fromRecents) {
+                            binding.status.text = getString(R.string.recents_status)
+                            binding.output.text = ""
+                            showRecentsDialog()
                         } else {
-                            val rootCause = generateSequence(e) { it.cause }.last()
-                            rootCause.message ?: rootCause.toString()
-                        }
-                        binding.status.text = getString(R.string.status_error, shortMessage)
-                        val detail = buildString {
-                            appendLine(e.toString())
-                            var cause = e.cause
-                            while (cause != null) {
-                                appendLine("Caused by: $cause")
-                                cause = cause.cause
+                            // Our own IllegalStateException wrappers carry short,
+                            // user-friendly messages (open failures, size limits).
+                            // PyException and friends carry a full traceback, so
+                            // collapse to the root cause for the status bar.
+                            val shortMessage = if (e is IllegalStateException) {
+                                e.message ?: e.toString()
+                            } else {
+                                val rootCause = generateSequence(e) { it.cause }.last()
+                                rootCause.message ?: rootCause.toString()
                             }
+                            binding.status.text = getString(R.string.status_error, shortMessage)
+                            val detail = buildString {
+                                appendLine(e.toString())
+                                var cause = e.cause
+                                while (cause != null) {
+                                    appendLine("Caused by: $cause")
+                                    cause = cause.cause
+                                }
+                            }
+                            binding.output.text = detail
                         }
-                        binding.output.text = detail
                         updateShareButton()
                     }
             }
@@ -207,6 +209,41 @@ class MainActivity : AppCompatActivity() {
             if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
         }
     }
+
+    /**
+     * True when a file-open failure looks like the classic "picked from
+     * Recents" symptom: the URI is stale/broken and the underlying provider
+     * reports ENOENT even though the file may still exist elsewhere.
+     */
+    private fun isRecentsOpenFailure(e: Throwable): Boolean {
+        var cause: Throwable? = e
+        while (cause != null) {
+            val message = cause.message ?: ""
+            if (message.contains("ENOENT") || message.contains("No such file")) {
+                return true
+            }
+            cause = cause.cause
+        }
+        return false
+    }
+
+    private fun showRecentsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.recents_dialog_title)
+            .setMessage(R.string.recents_dialog_message)
+            .setPositiveButton(R.string.recents_dialog_retry) { _, _ ->
+                pickFile.launch(SUPPORTED_MIME_TYPES)
+            }
+            .setNegativeButton(R.string.recents_dialog_cancel, null)
+            .show()
+    }
+
+    /** A file could not be opened; [fromRecents] marks the stale-Recents case. */
+    private class FileOpenException(
+        message: String,
+        cause: Throwable,
+        val fromRecents: Boolean,
+    ) : IllegalStateException(message, cause)
 
     companion object {
         private const val MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB

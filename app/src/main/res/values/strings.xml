@@ -14,5 +14,10 @@
     <string name="status_too_large">File is too large (max %1$d MB)</string>
     <string name="status_error">Error: %1$s</string>
     <string name="error_open_hint"> If you picked this from Recents, browse to it instead — Recents entries can point to files that no longer exist.</string>
+    <string name="recents_dialog_title">Can\'t open that file from Recents</string>
+    <string name="recents_dialog_message">Files in Recents can become unreadable over time, even when the file still exists. Please pick it again from its actual location — for example Downloads.</string>
+    <string name="recents_dialog_retry">Pick again</string>
+    <string name="recents_dialog_cancel">Cancel</string>
+    <string name="recents_status">Couldn\'t open that file from Recents. Pick it again from its real location, e.g. Downloads.</string>
     <string name="output_hint">Markdown output will appear here.</string>
 </resources>

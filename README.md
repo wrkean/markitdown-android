@@ -162,7 +162,7 @@ Both APKs are automatically attached to the GitHub Release.
 | `Current thread does not hold the state lock` | `org.gradle.parallel=true` races with KGP on Gradle 8.9. It's disabled in `gradle.properties` — don't re-enable. |
 | `No matching distribution found` | The package has no Android wheel. Check `app/build.gradle.kts` pip block. |
 | Python version mismatch | `buildPython` must match `chaquopy.version` (3.12). |
-| File open fails from Recents | Pick from "Downloads"/browse instead. Recents entries can be stale. |
+| File open fails from Recents | The app now shows a dialog asking you to pick again from a real location (e.g. "Downloads"); Recents entries can be stale. |
 
 ## License
 
