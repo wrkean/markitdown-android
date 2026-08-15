@@ -116,13 +116,17 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             // Our own IllegalStateException wrappers carry short,
                             // user-friendly messages (open failures, size limits).
-                            // PyException and friends carry a full traceback, so
-                            // collapse to the root cause for the status bar.
+                            // PyException carries the full traceback; its last
+                            // non-blank line is the actual error summary, so use
+                            // that for the status bar. The full traceback is
+                            // shown below in the output pane.
                             val shortMessage = if (e is IllegalStateException) {
                                 e.message ?: e.toString()
                             } else {
                                 val rootCause = generateSequence(e) { it.cause }.last()
-                                rootCause.message ?: rootCause.toString()
+                                val rootMessage = rootCause.message ?: rootCause.toString()
+                                rootMessage.lineSequence().lastOrNull { it.isNotBlank() }
+                                    ?: rootMessage
                             }
                             binding.status.text = getString(R.string.status_error, shortMessage)
                             val detail = buildString {
