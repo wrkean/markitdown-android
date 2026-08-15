@@ -10,7 +10,6 @@ import android.view.View
 import java.io.ByteArrayOutputStream
 import java.io.FileNotFoundException
 import java.io.InputStream
-import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -230,24 +229,13 @@ class MainActivity : AppCompatActivity() {
             ?: return null
         val mediaId = docId.substringAfterLast(':').toLongOrNull() ?: return null
 
-        val candidates = buildList {
-            val lowerName = (queryDisplayName(uri) ?: "").lowercase(Locale.US)
-            when {
-                lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")
-                    || lowerName.endsWith(".png") || lowerName.endsWith(".webp") -> {
-                    add(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-                }
-                lowerName.endsWith(".mp4") || lowerName.endsWith(".m4v") -> {
-                    add(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-                }
-                lowerName.endsWith(".mp3") || lowerName.endsWith(".wav")
-                    || lowerName.endsWith(".m4a") -> {
-                    add(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
-                }
-            }
-            add(MediaStore.Files.getContentUri("external"))
-            add(MediaStore.Downloads.EXTERNAL_CONTENT_URI)
-        }
+        // Image/audio/video collections are unreachable here: those extensions
+        // are rejected earlier by the SUPPORTED_EXTENSIONS check, so only the
+        // generic Files and Downloads collections can hold the mediaId.
+        val candidates = listOf(
+            MediaStore.Files.getContentUri("external"),
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+        )
 
         for (baseUri in candidates.distinct()) {
             val mediaUri = Uri.withAppendedPath(baseUri, mediaId.toString())
