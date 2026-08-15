@@ -17,7 +17,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.chaquo.python.Python
 import com.markitdown.android.databinding.ActivityMainBinding
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -91,11 +93,15 @@ class MainActivity : AppCompatActivity() {
                     tooLargeError()
                 }
 
+                // If the activity was destroyed mid-read, bail before running
+                // the expensive conversion.
+                ensureActive()
+
                 Python.getInstance()
                     .getModule("markitdown_android")
                     .callAttr("convert_bytes", bytes, name)
                     .toString()
-            }
+            }.onFailure { if (it is CancellationException) throw it }
 
             withContext(Dispatchers.Main) {
                 binding.progress.visibility = View.GONE
