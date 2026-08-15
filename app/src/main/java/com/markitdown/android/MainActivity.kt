@@ -68,6 +68,13 @@ class MainActivity : AppCompatActivity() {
         // Python runs fine off the main thread; do the conversion on IO.
         lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching {
+                // Reject oversized files before streaming them into memory; the
+                // provider-reported size is authoritative where it is present.
+                val size = queryFileSize(uri)
+                if (size != null && size > MAX_FILE_SIZE_BYTES) {
+                    tooLargeError()
+                }
+
                 val bytes = try {
                     readFileWithProgress(uri)
                 } catch (e: Exception) {
@@ -77,14 +84,13 @@ class MainActivity : AppCompatActivity() {
                         "Failed to open $uri: ${e.message ?: e}. $hint", e, fromRecents
                     )
                 }
+
+                // Belt and braces: the reported size can be missing or wrong,
+                // so re-check what was actually read into memory.
                 if (bytes.size > MAX_FILE_SIZE_BYTES) {
-                    error(
-                        getString(
-                            R.string.status_too_large,
-                            (MAX_FILE_SIZE_BYTES / 1024 / 1024)
-                        )
-                    )
+                    tooLargeError()
                 }
+
                 Python.getInstance()
                     .getModule("markitdown_android")
                     .callAttr("convert_bytes", bytes, name)
@@ -134,6 +140,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /** Throws the user-facing "file too large" error. */
+    private fun tooLargeError(): Nothing =
+        error(getString(R.string.status_too_large, MAX_FILE_SIZE_BYTES / 1024 / 1024))
 
     private fun openSelectedFile(uri: Uri): InputStream {
         return try {
