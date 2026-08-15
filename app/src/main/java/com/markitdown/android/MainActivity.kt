@@ -1,5 +1,6 @@
 package com.markitdown.android
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -7,7 +8,9 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.view.View
+import androidx.core.content.FileProvider
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
 import androidx.activity.result.contract.ActivityResultContracts
@@ -250,11 +253,52 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
+    /**
+     * Shares the last converted Markdown. Short outputs are sent as inline
+     * text (the friendliest UX in most targets). Long outputs must not be:
+     * Intent extras travel through the ~1 MB Binder transaction buffer, so a
+     * large EXTRA_TEXT string crashes with TransactionTooLargeException, and
+     * [Intent.createChooser] re-parcels the intent, roughly halving the safe
+     * budget. Those are written to a cache file and shared via a FileProvider
+     * content:// URI instead, which streams the bytes and has no size limit.
+     */
     private fun shareOutput() {
         val markdown = lastMarkdown ?: return
+
+        if (markdown.toByteArray(Charsets.UTF_8).size <= MAX_INLINE_SHARE_BYTES) {
+            shareText(markdown)
+        } else {
+            shareFile(markdown)
+        }
+    }
+
+    private fun shareText(markdown: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, markdown)
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share_title)))
+    }
+
+    /** Shares [markdown] as a cache file, falling back to inline text if the
+     *  temp file cannot be written (disk full, etc.). */
+    private fun shareFile(markdown: String) {
+        val uri = runCatching {
+            val file = File(cacheDir, SHARE_FILE_NAME)
+            file.writeText(markdown, Charsets.UTF_8)
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        }.getOrNull()
+
+        if (uri == null) {
+            shareText(markdown)
+            return
+        }
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri(null, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, getString(R.string.share_title)))
     }
@@ -308,6 +352,17 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  // 50 MB
         private const val READ_CHUNK_SIZE = 64 * 1024              // 64 KB
+
+        /**
+         * Largest Markdown payload sent as inline Intent text. Binder
+         * transactions cap out at ~1 MB and createChooser re-parcels the
+         * intent, so stay well below that; anything bigger goes through
+         * FileProvider instead.
+         */
+        private const val MAX_INLINE_SHARE_BYTES = 500 * 1024  // 500 KB
+
+        /** Cache file backing large shares; overwritten on every share. */
+        private const val SHARE_FILE_NAME = "markitdown_share.md"
 
         /**
          * Formats MarkItDown can convert fully offline. This list drives both
