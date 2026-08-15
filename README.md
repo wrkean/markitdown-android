@@ -17,7 +17,7 @@ Built on [MarkItDown](https://github.com/microsoft/markitdown) by Microsoft, pac
 
 ## What it does
 
-Pick a document → get clean Markdown. Everything runs on your device — no files leave your phone.
+Pick a document and get a clean Markdown. Everything runs on your device and no files leave your phone.
 
 **Supported formats:**
 
@@ -43,8 +43,8 @@ Pick a document → get clean Markdown. Everything runs on your device — no fi
 
 1. Open the app
 2. Tap **Pick a file**
-3. Browse to your document (tip: pick from "Downloads", not "Recents")
-4. The Markdown appears — tap **Share** to send it somewhere
+3. Browse to your document
+4. The Markdown text appears. Then tap **Share** to send it somewhere
 
 ## Why Markdown?
 
